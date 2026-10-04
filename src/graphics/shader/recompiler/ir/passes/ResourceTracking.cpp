@@ -6,6 +6,7 @@
 #include "graphics/shader/recompiler/ir/passes/SrtWalker.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <fmt/format.h>
 #include <map>
 #include <numeric>
@@ -1672,6 +1673,21 @@ private:
 			    std::all_of(descriptor.dwords.begin(), descriptor.dwords.begin() + width,
 			                [](Value word) { return word.Resolve().GetType() == Type::U32; })) {
 				return false;
+			}
+			if (expected == ValueOpcode::GetImageResource) {
+				// WORKAROUND (parche local): descriptor de imagen elegido en tiempo de ejecucion.
+				// En lugar de abortar, se usa un descriptor nulo (todo ceros) -> textura vacia.
+				std::fprintf(stderr,
+				             "[KytyPS5 workaround] shader hash=0x%016llx pc=0x%08x: %.*s dword %u no "
+				             "resoluble; usando imagen nula\n",
+				             static_cast<unsigned long long>(m_program.shader_hash), pc,
+				             static_cast<int>(ValueOpcodeName(expected).size()),
+				             ValueOpcodeName(expected).data(), bad_dword);
+				DescriptorSource null_descriptor;
+				null_descriptor.dword_count = width;
+				null_descriptor.dwords.fill(Value(0u));
+				source = InternSource(null_descriptor);
+				return true;
 			}
 			Fail(pc, fmt::format("{} dword {} is not a valid runtime value",
 			                     ValueOpcodeName(expected), bad_dword));
